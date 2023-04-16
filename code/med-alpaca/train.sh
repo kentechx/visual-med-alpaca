@@ -1,6 +1,6 @@
 torchrun --nproc_per_node=1 train.py \
     --model_name_or_path decapoda-research/llama-7b-hf \
-    --data_path /path/to/med_alpaca_data_clean.json \
+    --data_path ../../data/med_alpaca_data_clean.json \
     --bf16 True \
     --output_dir ./med-alpaca \
     --num_train_epochs 3 \

@@ -9,15 +9,16 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
 import torch
 from tqdm import tqdm
+from accelerate import Accelerator
 
 # path to the csv containing training data directories
-train_data_csv = ""
+train_data_csv = "../../data/radiologytraindata_cleaned.csv"
 # path to the folder containing the training data images
-train_data_folder = ""
+train_data_folder = "/mnt/datasets/ROCO/train/radiology/images/"
 # path to the csv containing training data directories
-validation_data_csv = ""
+validation_data_csv = "../../data/radiologyvaldata_cleaned.csv"
 # path to the folder containing the training data images
-validation_data_folder = ""
+validation_data_folder = "/mnt/datasets/ROCO/validation/radiology/images/"
 # save pretrained model to
 output_dir = "./med-git-base"
 
@@ -70,8 +71,8 @@ train_dataset = ImageCaptioningDataset(dataset, processor)
 validation_dataset = ImageCaptioningDataset(val_dataset, processor)
 
 # Next, we create a corresponding [PyTorch DataLoader](https://pytorch.org/tutorials/beginner/basics/data_tutorial.html), which allows us to get batches of data from the dataset.
-train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=4)
-validation_dataloader = DataLoader(validation_dataset, shuffle=False, batch_size=4)
+train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=4)
+validation_dataloader = DataLoader(validation_dataset, shuffle=False, batch_size=16, num_workers=4)
 
 model = AutoModelForCausalLM.from_pretrained("microsoft/git-base")
 
@@ -88,10 +89,13 @@ print(outputs.loss)
 # Train the model
 optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# device = "cuda" if torch.cuda.is_available() else "cpu"
+accelerate = Accelerator()
+device = accelerate.device
 print(device)
-model.to(device)
+# model.to(device)
 
+model, optimizer, train_dataloader, validation_dataloader = accelerate.prepare(model, optimizer, train_dataloader, validation_dataloader)
 
 num_epochs = 30
 train_loss_history = []
@@ -110,7 +114,8 @@ for epoch in range(num_epochs):
             loss = outputs.loss
             train_loss_history.append(loss.item())
             optimizer.zero_grad()
-            loss.backward()
+            # loss.backward()
+            accelerate.backward(loss)
             optimizer.step()
             avg_loss = (avg_loss * batch_idx + loss.item()) / (batch_idx + 1)
             pbar.update(1)
@@ -129,6 +134,8 @@ for epoch in range(num_epochs):
         validation_loss /= len(validation_dataloader)
         print(f"Epoch {epoch}, Validation Loss {validation_loss:.4f}")
 
-model.save_pretrained(output_dir)
+accelerate.wait_for_everyone()
+model = accelerate.unwrap_model(model)
+model.save_pretrained(output_dir, save_function=accelerate.save, state_dict=accelerate.get_state_dict(model))
 processor.save_pretrained(output_dir)
 
