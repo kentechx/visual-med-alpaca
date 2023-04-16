@@ -44,6 +44,7 @@ def train(
     # llm hyperparams
     train_on_inputs: bool = True,  # if False, masks out inputs in loss
     group_by_length: bool = True,  # faster, but produces an odd training loss curve
+    resume_from_checkpoint: bool = False,
 ):
     print(
         f"Training Alpaca-LoRA model with params:\n"
@@ -62,6 +63,7 @@ def train(
         f"lora_target_modules: {lora_target_modules}\n"
         f"train_on_inputs: {train_on_inputs}\n"
         f"group_by_length: {group_by_length}\n"
+        f"resume_from_checkpoint: {resume_from_checkpoint}\n"
     )
     assert (
         base_model
@@ -183,7 +185,7 @@ def train(
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     model.save_pretrained(output_dir)
 
